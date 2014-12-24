@@ -8,7 +8,12 @@ let base_port = 6881
 let n_bits = 10
 let k_bits = 3
 let token = "token"
-let bootstrap_nodes = []
+let bootstrap_nodes = [
+  ADDR_INET (inet_addr_of_string "67.215.246.10", 6881);
+  ADDR_INET (inet_addr_of_string "82.221.103.244", 6881);
+  ADDR_INET (inet_addr_of_string "91.121.60.42", 6881);
+  ADDR_INET (inet_addr_of_string "212.129.33.50", 6881);
+]
 
 let my_ip = inet_addr_of_string Sys.argv.(1)
 
