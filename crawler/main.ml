@@ -76,10 +76,11 @@ let add_node (nid, addr) =
   let i = read_int n_bits nid in
   good_nodes.(i) <- Good (nid, addr)
 
-let propose_node (nid, addr) =
+let propose_node ((nid, ADDR_INET (ip, port)) as node) =
+  if ip <> my_ip then
   let i = read_int n_bits nid in
   match good_nodes.(i) with
-  | Empty | Unknown _ -> good_nodes.(i) <- Good (nid, addr)
+  | Empty | Unknown _ -> good_nodes.(i) <- Good node
   | Good _ -> ()
 
 let send_string sock dst str =
