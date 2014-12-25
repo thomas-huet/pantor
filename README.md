@@ -1,4 +1,4 @@
-# Pantorr
+# Pantor
 
 A searchable index of all public torrents.
 

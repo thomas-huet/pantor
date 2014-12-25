@@ -108,14 +108,12 @@ let answer i orig = function
   |> send_string sockets.(i) orig
 | Get_peers (tid, nid, infohash) ->
   (* TODO *)
-  lwt () = Lwt_io.printf "get_peers" in
   Got_nodes (tid, ids.(i), token, get_nodes infohash)
   |> bencode
   |> send_string sockets.(i) orig
 | Found_node (tid, nid, nodes) -> return (List.iter propose_node nodes)
 | Announce_peer (tid, nid, _, infohash, port, implied) -> begin
   (* TODO *)
-  lwt () = Lwt_io.printf "announce_peers" in
   return ()
 end
 | Pong (tid, nid) -> return (add_node (nid, orig))
