@@ -4,8 +4,9 @@ open Lwt
 open Unix
 open Lwt_unix
 
-let base_port = 6881
-let n_bits = 5
+let base_port = 2000
+let n_bits = 9
+let timeout_good_nodes = 7 * 60
 let k_bits = 3
 let token = "token"
 let bootstrap_nodes = [
@@ -176,7 +177,7 @@ let rec supervisor i =
         in
         supervisor (i + 1)
   else
-    lwt () = timeout (1 * 60) in
+    lwt () = timeout timeout_good_nodes in
     supervisor 0
 
 let threads = List.init (1 lsl n_bits) thread
