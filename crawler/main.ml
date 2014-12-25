@@ -5,7 +5,7 @@ open Unix
 open Lwt_unix
 
 let base_port = 6881
-let n_bits = 10
+let n_bits = 5
 let k_bits = 3
 let token = "token"
 let bootstrap_nodes = [
@@ -15,7 +15,11 @@ let bootstrap_nodes = [
   ADDR_INET (inet_addr_of_string "212.129.33.50", 6881);
 ]
 
-let my_ip = inet_addr_of_string Sys.argv.(1)
+let my_ip =
+  if Array.length Sys.argv = 2 then inet_addr_of_string Sys.argv.(1)
+  else
+    let () = Printf.printf "usage: pantor ip\n" in
+    exit 1
 
 let create_socket i =
   let s = socket PF_INET SOCK_DGRAM 0 in
@@ -89,8 +93,8 @@ let propose_node ((nid, ADDR_INET (ip, port)) as node) =
   | Good _ -> ()
 
 let send_string sock dst str =
-  sendto sock str 0 (String.length str) [] dst
-  >|= ignore
+  lwt _ = sendto sock str 0 (String.length str) [] dst in
+  return ()
 
 let answer i orig = function
 | Ping (tid, _) ->
@@ -103,13 +107,14 @@ let answer i orig = function
   |> send_string sockets.(i) orig
 | Get_peers (tid, nid, infohash) ->
   (* TODO *)
+  lwt () = Lwt_io.printf "get_peers" in
   Got_nodes (tid, ids.(i), token, get_nodes infohash)
   |> bencode
   |> send_string sockets.(i) orig
 | Found_node (tid, nid, nodes) -> return (List.iter propose_node nodes)
 | Announce_peer (tid, nid, _, infohash, port, implied) -> begin
   (* TODO *)
-  Printf.printf "announce\n";
+  lwt () = Lwt_io.printf "announce_peers" in
   return ()
 end
 | Pong (tid, nid) -> return (add_node (nid, orig))
@@ -119,15 +124,15 @@ end
 
 let rec thread i =
   let buf = Bytes.create 512 in
-  recvfrom sockets.(i) buf 0 512 []
-  >>= (fun (_, orig) ->
-    let msg = bdecode buf in
-    answer i orig msg)
-  >>= (fun () -> thread i)
+  lwt (_, orig) = recvfrom sockets.(i) buf 0 512 [] in
+  let msg = bdecode buf in
+  lwt () = Log.input orig msg in
+  lwt () = answer i orig msg in
+  thread i
 
 let timeout n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
 
-let bootstrap () =
+let bootstrap =
   let ping addr =
     let i = Random.int (1 lsl n_bits) in
     Ping ("tr", ids.(i))
@@ -159,16 +164,16 @@ let rec supervisor i =
       match close_node i with
       | None -> supervisor (i + 1)
       | Some (j, (_, addr)) ->
-	Find_node ("tr", ids.(j), ids.(i))
-	|> bencode
-	|> send_string sockets.(j) addr
+	lwt () =
+          Find_node ("tr", ids.(j), ids.(i))
+          |> bencode
+          |> send_string sockets.(j) addr
+        in
+        supervisor (i + 1)
   else
-    timeout (7 * 60 * 60)
-    >>= (fun () -> supervisor 0)
+    lwt () = timeout (1 * 60) in
+    supervisor 0
 
-let main = join
-  (bootstrap ()
-  :: supervisor 0
-  :: List.init (1 lsl n_bits) thread)
+let threads = List.init (1 lsl n_bits) thread
 
-let () = Lwt_main.run main
+let () = Lwt_main.run (supervisor 0)
