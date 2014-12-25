@@ -156,8 +156,13 @@ let close_node i =
 let rec supervisor i =
   if i < 1 lsl n_bits then
     match good_nodes.(i) with
-    | Good node -> begin
+    | Good ((_, addr) as node) -> begin
       good_nodes.(i) <- Unknown node;
+      lwt () =
+        Ping ("tr", ids.(i))
+        |> bencode
+        |> send_string sockets.(i) addr
+      in
       supervisor (i + 1)
     end
     | Unknown _ | Empty ->
