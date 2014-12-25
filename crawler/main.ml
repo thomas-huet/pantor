@@ -124,7 +124,10 @@ end
 let rec thread i =
   let buf = Bytes.create 512 in
   lwt (_, orig) = recvfrom sockets.(i) buf 0 512 [] in
-  let msg = bdecode buf in
+  let msg = try
+    bdecode buf
+  with _ -> Error ("", 0, "")
+  in
   lwt () = Log.input orig msg in
   lwt () = answer i orig msg in
   thread i
