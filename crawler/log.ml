@@ -15,7 +15,7 @@ let hex s =
 
 let date () () =
   let t = localtime (time ()) in
-  Printf.sprintf "[%d:%d:%d]" t.tm_hour t.tm_min t.tm_sec
+  Printf.sprintf "[%02d:%02d:%02d]" t.tm_hour t.tm_min t.tm_sec
 
 let input (ADDR_INET (ip, port)) msg = begin
   match msg with
