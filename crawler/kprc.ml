@@ -53,8 +53,14 @@ open Bencode
 exception Malformed_message
 
 let bdecode s = try
-  let gets k d = let String s = Dict.find k d in s in
-  let geti k d = let Int s = Dict.find k d in s in
+  let gets k d =
+    let String s = Dict.find k d in
+    s
+  in
+  let geti k d =
+    let Int s = Dict.find k d in
+    s
+  in
   let Dict d = decode s in
   let tid = gets "t" d in
   match gets "y" d with
