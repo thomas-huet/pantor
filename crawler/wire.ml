@@ -42,3 +42,14 @@ let create addr infohash =
       fail_close Unsupported sock
 
 let close t = shutdown t.sock SHUTDOWN_ALL
+
+let receive t =
+  lwt lenstr = receive_string t.sock 1 in
+  receive_string t.sock (Char.code lenstr.[0])
+
+let rec log t =
+  let open Log in
+  let open Lwt_io in
+  lwt s = receive t in
+  lwt () = printf "%a Received %s\n" date () (hex s) in
+  log t

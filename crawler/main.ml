@@ -125,6 +125,7 @@ let answer i orig = function
   let _ = try_lwt
     lwt () = timeout delay in
     lwt wire = create addr infohash in
+    lwt () = log wire in
     (* TODO *)
     return (close wire)
   with _ -> return () in
