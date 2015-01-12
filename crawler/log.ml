@@ -18,27 +18,28 @@ let date () () =
   Printf.sprintf "[%02d:%02d:%02d]" t.tm_hour t.tm_min t.tm_sec
 
 let input (ADDR_INET (ip, port)) msg = begin
+  let open Lwt_io in
   match msg with
   | Ping (_, nid) ->
-    Lwt_io.printf "%a Ping from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port
+    printf "%a Ping from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port
   | Pong (_, nid) ->
-    Lwt_io.printf "%a Pong from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port
+    printf "%a Pong from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port
   | Find_node (_, nid, target) ->
-    Lwt_io.printf "%a Find_node %s from %s (%s:%d)\n" date () (hex target) (hex nid) (string_of_inet_addr ip) port
+    printf "%a Find_node %s from %s (%s:%d)\n" date () (hex target) (hex nid) (string_of_inet_addr ip) port
   | Found_node (_, nid, nodes) -> begin
-    lwt () = Lwt_io.printf "%a Found_node from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
-    Lwt_list.iter_s (fun (nid, ADDR_INET (ip, port)) -> Lwt_io.printf "%s (%s:%d)\n" (hex nid) (string_of_inet_addr ip) port) nodes
+    lwt () = printf "%a Found_node from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
+    Lwt_list.iter_s (fun (nid, ADDR_INET (ip, port)) -> printf "%s (%s:%d)\n" (hex nid) (string_of_inet_addr ip) port) nodes
   end
   | Get_peers (_, nid, target) ->
-    Lwt_io.printf "%a Get_peers for %s from %s (%s:%d)\n" date () (hex target) (hex nid) (string_of_inet_addr ip) port
+    printf "%a Get_peers for %s from %s (%s:%d)\n" date () (hex target) (hex nid) (string_of_inet_addr ip) port
   | Got_peers (_, nid, _, peers) ->
-    lwt () = Lwt_io.printf "%a Got_peers from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
-    Lwt_list.iter_s (Lwt_io.printf "%s\n") peers
+    lwt () = printf "%a Got_peers from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
+    Lwt_list.iter_s (printf "%s\n") peers
   | Got_nodes (_, nid, _, nodes) ->
-    lwt () = Lwt_io.printf "%a Got_nodes from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
-    Lwt_list.iter_s (fun (nid, ADDR_INET (ip, port)) -> Lwt_io.printf "%s (%s:%d)\n" (hex nid) (string_of_inet_addr ip) port) nodes
+    lwt () = printf "%a Got_nodes from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
+    Lwt_list.iter_s (fun (nid, ADDR_INET (ip, port)) -> printf "%s (%s:%d)\n" (hex nid) (string_of_inet_addr ip) port) nodes
   | Announce_peer (_, nid, token, infohash, _, _) ->
-    Lwt_io.printf "%a Announce_peer %s (%s:%d) for %s (%s)\n" date () (hex nid) (string_of_inet_addr ip) port (hex infohash) (hex token)
+    printf "%a Announce_peer %s (%s:%d) for %s (%s)\n" date () (hex nid) (string_of_inet_addr ip) port (hex infohash) (hex token)
   | Error (_, code, descr) ->
-    Lwt_io.printf "%a Error %d: \"%s\" from %s:%d\n" date () code descr (string_of_inet_addr ip) port
+    printf "%a Error %d: \"%s\" from %s:%d\n" date () code descr (string_of_inet_addr ip) port
 end
