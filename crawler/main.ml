@@ -15,6 +15,7 @@ let bootstrap_nodes = [
   ADDR_INET (inet_addr_of_string "91.121.60.42", 6881);
   ADDR_INET (inet_addr_of_string "212.129.33.50", 6881);
 ]
+let delay = 10
 
 let my_ip =
   if Array.length Sys.argv = 2 then inet_addr_of_string Sys.argv.(1)
@@ -97,6 +98,8 @@ let send_string sock dst str =
   lwt _ = sendto sock str 0 (String.length str) [] dst in
   return ()
 
+let timeout n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
+
 let answer i orig = function
 | Ping (tid, _) ->
   Pong (tid, ids.(i))
@@ -107,13 +110,24 @@ let answer i orig = function
   |> bencode
   |> send_string sockets.(i) orig
 | Get_peers (tid, nid, infohash) ->
-  (* TODO *)
   Got_nodes (tid, ids.(i), token, get_nodes infohash)
   |> bencode
   |> send_string sockets.(i) orig
 | Found_node (tid, nid, nodes) -> return (List.iter propose_node nodes)
 | Announce_peer (tid, nid, _, infohash, port, implied) -> begin
-  (* TODO *)
+  let open Wire in
+  let addr =
+    if implied then orig
+    else
+      let ADDR_INET (ip, _) = orig in
+      ADDR_INET (ip, port)
+  in
+  let _ = try_lwt
+    lwt () = timeout delay in
+    lwt wire = create addr infohash in
+    (* TODO *)
+    return (close wire)
+  with _ -> return () in
   return ()
 end
 | Pong (tid, nid) -> return (add_node (nid, orig))
@@ -131,8 +145,6 @@ let rec thread i =
   lwt () = Log.input orig msg in
   lwt () = answer i orig msg in
   thread i
-
-let timeout n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
 
 let bootstrap =
   let ping addr =

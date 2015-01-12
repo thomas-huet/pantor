@@ -40,3 +40,5 @@ let create addr infohash =
       return {sock; info_hash; peer_id}
     else
       fail_close Unsupported sock
+
+let close t = shutdown t.sock SHUTDOWN_ALL
