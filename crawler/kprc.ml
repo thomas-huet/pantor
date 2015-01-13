@@ -30,7 +30,8 @@ let sockaddrs_of_compact s =
      Unix.ADDR_INET (inet_addr, Char.code s.[26*i+24] * 256 + Char.code s.[26*i+25]))
     :: loop (i+1)
   in
-  loop 0
+  if String.length s mod 26 = 0 then loop 0
+  else []
 
 let compact_of_sockaddrs l =
   let buf = Buffer.create 26 in
