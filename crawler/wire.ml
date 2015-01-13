@@ -79,6 +79,8 @@ let extended_handshake wire =
 let rec log wire =
   let open Log in
   let open Lwt_io in
+  let ADDR_INET (ip, port) = getpeername wire.sock in
+  lwt () = printf "%a Listenning %s (%s:%d) for %s\n" date () (hex wire.peer_id) (string_of_inet_addr ip) port (hex wire.info_hash) in
   lwt s = receive wire in
   lwt () = printf "%a Received %s\n" date () (hex s) in
   log wire
