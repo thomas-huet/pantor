@@ -33,8 +33,7 @@ let ninfos_of_compact s =
      sockaddr_of_compact (String.sub s (26*i+20) 6))
     :: loop (i+1)
   in
-  if String.length s mod 26 = 0 then loop 0
-  else []
+  loop 0
 
 let compact_of_sockaddr (Unix.ADDR_INET (ip, port)) =
   let buf= Buffer.create 6 in
