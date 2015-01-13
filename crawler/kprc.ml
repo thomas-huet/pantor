@@ -65,6 +65,11 @@ let bdecode s = try
     let String s = Dict.find k d in
     s
   in
+  let get20 k d =
+    let String s = Dict.find k d in
+    if String.length s <> 20 then raise Malformed_message
+    else s
+  in
   let geti k d =
     let Int s = Dict.find k d in
     s
@@ -76,19 +81,19 @@ let bdecode s = try
     let Dict a = Dict.find "a" d in
     match gets "q" d with
     | "ping" ->
-      Ping (tid, gets "id" a)
+      Ping (tid, get20 "id" a)
     | "find_node" ->
-      Find_node (tid, gets "id" a, gets "target" a)
+      Find_node (tid, get20 "id" a, get20 "target" a)
     | "get_peers" ->
-      Get_peers (tid, gets "id" a, gets "info_hash" a)
+      Get_peers (tid, get20 "id" a, get20 "info_hash" a)
     | "announce_peer" ->
       let implied = Dict.mem "implied_port" a && Dict.find "implied_port" a = Int 1 in
-      Announce_peer (tid, gets "id" a, gets "token" a, gets "info_hash" a, geti "port" a, implied)
+      Announce_peer (tid, get20 "id" a, gets "token" a, get20 "info_hash" a, geti "port" a, implied)
     | _ -> raise Malformed_message
   end
   | "r" ->
     let Dict r = Dict.find "r" d in
-    let nid = gets "id" r in
+    let nid = get20 "id" r in
     if Dict.mem "values" r then
       let List peers = Dict.find "values" r in
       Got_peers (tid, nid, gets "token" r, List.map (fun (String s) -> sockaddr_of_compact s) peers)
