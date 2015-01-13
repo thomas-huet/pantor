@@ -104,6 +104,7 @@ let request_metadata peer infohash = try_lwt
   let open Wire in
   lwt () = delay wait_time in
   lwt wire = create peer infohash in
+  lwt wire = extended_handshake wire in
   lwt () = log wire in
   (* TODO *)
   return (close wire)
