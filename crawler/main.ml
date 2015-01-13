@@ -100,6 +100,15 @@ let send_string sock dst str =
 
 let timeout n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
 
+let request_metadata peer infohash = try_lwt
+  let open Wire in
+  lwt () = timeout delay in
+  lwt wire = create peer infohash in
+  lwt () = log wire in
+  (* TODO *)
+  return (close wire)
+with _ -> return ()
+
 let answer i orig = function
 | Ping (tid, _) ->
   Pong (tid, ids.(i))
@@ -110,30 +119,32 @@ let answer i orig = function
   |> bencode
   |> send_string sockets.(i) orig
 | Get_peers (tid, nid, infohash) ->
+  let _ =
+    lwt () = timeout delay in
+    Get_peers (infohash, ids.(i), infohash)
+    |> bencode
+    |> send_string sockets.(i) orig
+  in
   Got_nodes (tid, ids.(i), token, get_nodes infohash)
   |> bencode
   |> send_string sockets.(i) orig
 | Found_node (tid, nid, nodes) -> return (List.iter propose_node nodes)
-| Announce_peer (tid, nid, _, infohash, port, implied) -> begin
-  let open Wire in
+| Announce_peer (tid, nid, _, infohash, port, implied) ->
   let addr =
     if implied then orig
     else
       let ADDR_INET (ip, _) = orig in
       ADDR_INET (ip, port)
   in
-  let _ = try_lwt
-    lwt () = timeout delay in
-    lwt wire = create addr infohash in
-    lwt () = log wire in
-    (* TODO *)
-    return (close wire)
-  with _ -> return () in
+  let _ = request_metadata addr infohash in
   return ()
-end
 | Pong (tid, nid) -> return (add_node (nid, orig))
+| Got_peers (infohash, nid, token, peers) ->
+  let _ =
+    Lwt_list.iter_p (fun peer -> request_metadata peer infohash) peers
+  in
+  return ()
 | Error (_, _, _)
-| Got_peers (_, _, _, _)
 | Got_nodes (_, _, _, _) -> return ()
 
 let rec thread i =
