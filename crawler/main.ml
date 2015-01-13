@@ -15,7 +15,7 @@ let bootstrap_nodes = [
   ADDR_INET (inet_addr_of_string "91.121.60.42", 6881);
   ADDR_INET (inet_addr_of_string "212.129.33.50", 6881);
 ]
-let delay = 10
+let wait_time = 10
 
 let my_ip =
   if Array.length Sys.argv = 2 then inet_addr_of_string Sys.argv.(1)
@@ -98,11 +98,11 @@ let send_string sock dst str =
   lwt _ = sendto sock str 0 (String.length str) [] dst in
   return ()
 
-let timeout n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
+let delay n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
 
 let request_metadata peer infohash = try_lwt
   let open Wire in
-  lwt () = timeout delay in
+  lwt () = delay wait_time in
   lwt wire = create peer infohash in
   lwt () = log wire in
   (* TODO *)
@@ -120,7 +120,7 @@ let answer i orig = function
   |> send_string sockets.(i) orig
 | Get_peers (tid, nid, infohash) ->
   let _ =
-    lwt () = timeout delay in
+    lwt () = delay wait_time in
     Get_peers (infohash, ids.(i), infohash)
     |> bencode
     |> send_string sockets.(i) orig
@@ -202,7 +202,7 @@ let rec supervisor i =
         in
         supervisor (i + 1)
   else
-    lwt () = timeout timeout_good_nodes in
+    lwt () = delay timeout_good_nodes in
     supervisor 0
 
 let threads = List.init (1 lsl n_bits) thread
