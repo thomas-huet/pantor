@@ -11,7 +11,7 @@ type t =
 | Find_node of tid * nid * nid
 | Found_node of tid * nid * ninfo list
 | Get_peers of tid * nid * infohash
-| Got_peers of tid * nid * token * string list
+| Got_peers of tid * nid * token * Unix.sockaddr list
 | Got_nodes of tid * nid * token * ninfo list
 | Announce_peer of tid * nid * token * infohash * int * bool
 

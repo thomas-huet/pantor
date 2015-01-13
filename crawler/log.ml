@@ -34,7 +34,10 @@ let input (ADDR_INET (ip, port)) msg = begin
     printf "%a Get_peers for %s from %s (%s:%d)\n" date () (hex target) (hex nid) (string_of_inet_addr ip) port
   | Got_peers (_, nid, _, peers) ->
     lwt () = printf "%a Got_peers from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
-    Lwt_list.iter_s (printf "%s\n") peers
+    let string_of_peer () (ADDR_INET (ip, port)) =
+      Printf.sprintf "%s:%d" (string_of_inet_addr ip) port
+    in
+    Lwt_list.iter_s (printf "%a\n" string_of_peer) peers
   | Got_nodes (_, nid, _, nodes) ->
     lwt () = printf "%a Got_nodes from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
     Lwt_list.iter_s (fun (nid, ADDR_INET (ip, port)) -> printf "%s (%s:%d)\n" (hex nid) (string_of_inet_addr ip) port) nodes

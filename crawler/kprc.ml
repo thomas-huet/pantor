@@ -11,40 +11,48 @@ type t =
 | Find_node of tid * nid * nid
 | Found_node of tid * nid * ninfo list
 | Get_peers of tid * nid * infohash
-| Got_peers of tid * nid * token * string list
+| Got_peers of tid * nid * token * Unix.sockaddr list
 | Got_nodes of tid * nid * token * ninfo list
 | Announce_peer of tid * nid * token * infohash * int * bool
 
-let sockaddrs_of_compact s =
+let sockaddr_of_compact s =
+  let inet_addr =
+    Unix.inet_addr_of_string
+      (Printf.sprintf "%d.%d.%d.%d"
+	(Char.code s.[0])
+	(Char.code s.[1])
+	(Char.code s.[2])
+	(Char.code s.[3]))
+  in
+  Unix.ADDR_INET (inet_addr, Char.code s.[4] * 256 + Char.code s.[5])
+
+let ninfos_of_compact s =
   let rec loop i =
     if 26 * i >= String.length s then [] else
-    let inet_addr =
-      Unix.inet_addr_of_string
-        (Printf.sprintf "%d.%d.%d.%d"
-          (Char.code s.[26*i+20])
-          (Char.code s.[26*i+21])
-          (Char.code s.[26*i+22])
-          (Char.code s.[26*i+23]))
-    in
     (String.sub s (26*i) 20,
-     Unix.ADDR_INET (inet_addr, Char.code s.[26*i+24] * 256 + Char.code s.[26*i+25]))
+     sockaddr_of_compact (String.sub s (26*i+20) 6))
     :: loop (i+1)
   in
   if String.length s mod 26 = 0 then loop 0
   else []
 
-let compact_of_sockaddrs l =
+let compact_of_sockaddr (Unix.ADDR_INET (ip, port)) =
+  let buf= Buffer.create 6 in
+  Scanf.sscanf (Unix.string_of_inet_addr ip) "%d.%d.%d.%d" (fun a b c d ->
+    Buffer.add_char buf (Char.chr a);
+    Buffer.add_char buf (Char.chr b);
+    Buffer.add_char buf (Char.chr c);
+    Buffer.add_char buf (Char.chr d);
+  );
+  Buffer.add_char buf (Char.chr (port / 256));
+  Buffer.add_char buf (Char.chr (port mod 256));
+  Buffer.contents buf
+
+let compact_of_ninfos l =
   let buf = Buffer.create 26 in
-  let compact (nid, Unix.ADDR_INET (ip, port)) =
+  let compact (nid, sockaddr) =
     Buffer.add_string buf nid;
-    Scanf.sscanf (Unix.string_of_inet_addr ip) "%d.%d.%d.%d" (fun a b c d ->
-      Buffer.add_char buf (Char.chr a);
-      Buffer.add_char buf (Char.chr b);
-      Buffer.add_char buf (Char.chr c);
-      Buffer.add_char buf (Char.chr d);
-    );
-    Buffer.add_char buf (Char.chr (port / 256));
-    Buffer.add_char buf (Char.chr (port mod 256));
+    Buffer.add_string buf (compact_of_sockaddr sockaddr)
   in
   List.iter compact l;
   Buffer.contents buf
@@ -84,9 +92,9 @@ let bdecode s = try
     let nid = gets "id" r in
     if Dict.mem "values" r then
       let List peers = Dict.find "values" r in
-      Got_peers (tid, nid, gets "token" r, List.map (fun (String s) -> s) peers)
+      Got_peers (tid, nid, gets "token" r, List.map (fun (String s) -> sockaddr_of_compact s) peers)
     else if Dict.mem "nodes" r then
-      let nodes = sockaddrs_of_compact (gets "nodes" r) in
+      let nodes = ninfos_of_compact (gets "nodes" r) in
       if Dict.mem "token" r then
 	Got_nodes (tid, nid, gets "token" r, nodes)
       else
@@ -127,7 +135,7 @@ let bencode = function
     "y", String "r";
     "r", Dict (dict_of_list [
       "id", String nid;
-      "nodes", String (compact_of_sockaddrs nodes)])]))
+      "nodes", String (compact_of_ninfos nodes)])]))
 | Get_peers (tid, nid, infohash) ->
   encode (Dict (dict_of_list [
     "t", String tid;
@@ -141,7 +149,7 @@ let bencode = function
     "r", Dict (dict_of_list [
       "id", String nid;
       "token", String token;
-      "values", List (List.map (fun s -> String s) peers)])]))
+      "values", List (List.map (fun s -> String (compact_of_sockaddr s)) peers)])]))
 | Got_nodes (tid, nid, token, nodes) ->
   encode (Dict (dict_of_list [
     "t", String tid;
@@ -149,7 +157,7 @@ let bencode = function
     "r", Dict (dict_of_list [
       "id", String nid;
       "token", String token;
-      "nodes", String (compact_of_sockaddrs nodes)])]))
+      "nodes", String (compact_of_ninfos nodes)])]))
 | Announce_peer (tid, nid, token, infohash, port, implied) ->
   encode (Dict (dict_of_list [
     "t", String tid;
