@@ -45,8 +45,9 @@ let create addr infohash =
 let close wire = shutdown wire.sock SHUTDOWN_ALL
 
 let receive wire =
-  lwt lenstr = receive_string wire.sock 1 in
-  receive_string wire.sock (Char.code lenstr.[0])
+  lwt lenstr = receive_string wire.sock 4 in
+  let len = (Char.code lenstr.[0] lsl 24) lor (Char.code lenstr.[1] lsl 16) lor (Char.code lenstr.[2] lsl 8) lor (Char.code lenstr.[3]) in
+  receive_string wire.sock len
 
 open Bencode
 
