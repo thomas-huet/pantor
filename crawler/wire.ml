@@ -9,6 +9,7 @@ type t = {
   info_hash : string;
   peer_id : string;
   metadata_size : int;
+  ut_metadata : int;
 }
 
 exception Bad_message
@@ -38,7 +39,7 @@ let create addr infohash =
     if Char.code features.[5] land 0x10 = 0x10 then
       lwt info_hash = receive_string sock 20 in
       lwt peer_id = receive_string sock 20 in
-      return {sock; info_hash; peer_id; metadata_size = 0}
+      return {sock; info_hash; peer_id; metadata_size = 0; ut_metadata = 0}
     else
       fail_close Unsupported sock
 
@@ -52,27 +53,30 @@ let receive wire =
 open Bencode
 
 let extended_handshake wire =
-  let Unix.ADDR_INET (ip, _) = getpeername wire.sock in
-  let buf = Buffer.create 4 in
-  Scanf.sscanf (Unix.string_of_inet_addr ip) "%d.%d.%d.%d" (fun a b c d ->
-    Buffer.add_char buf (Char.chr a);
-    Buffer.add_char buf (Char.chr b);
-    Buffer.add_char buf (Char.chr c);
-    Buffer.add_char buf (Char.chr d);
-  );
-  let hand = encode (Dict (dict_of_list [
-    "m", Dict (dict_of_list ["ut_metadata", Int 1]);
-    "p", Int 0;
-    "v", String "Pantor (github.com/thomas-huet/pantor)";
-    "yourip", String (Buffer.contents buf);
-    "reqq", Int 42]))
-  in
-  lwt _ = send wire.sock hand 0 (String.length hand) [] in
-  lwt shake = receive wire in
-  if String.length shake > 2 && shake.[0] = '\020' && shake.[1] = '\000' then try_lwt
-    let Dict handshake = decode (String.sub shake 2 (String.length shake - 2)) in
+  lwt hand = receive wire in
+  if String.length hand > 2 && hand.[0] = '\020' && hand.[1] = '\000' then try_lwt
+    let Dict handshake = decode (String.sub hand 2 (String.length hand - 2)) in
     let Int metadata_size = Dict.find "metadata_size" handshake in
-    return {wire with metadata_size}
+    let Dict m = Dict.find "m" handshake in
+    let Int ut_metadata = Dict.find "ut_metadata" m in
+    let Unix.ADDR_INET (ip, _) = getpeername wire.sock in
+    let buf = Buffer.create 4 in
+    Scanf.sscanf (Unix.string_of_inet_addr ip) "%d.%d.%d.%d" (fun a b c d ->
+      Buffer.add_char buf (Char.chr a);
+      Buffer.add_char buf (Char.chr b);
+      Buffer.add_char buf (Char.chr c);
+      Buffer.add_char buf (Char.chr d);
+    );
+    let shake = encode (Dict (dict_of_list [
+      "m", Dict (dict_of_list ["ut_metadata", Int ut_metadata]);
+      "metadata_size", Int metadata_size;
+      "p", Int 0;
+      "v", String "Pantor (github.com/thomas-huet/pantor)";
+      "yourip", String (Buffer.contents buf);
+      "reqq", Int 42]))
+    in
+    lwt _ = send wire.sock shake 0 (String.length shake) [] in
+    return {wire with metadata_size; ut_metadata}
   with _ -> fail_close Bad_message wire.sock
   else
     fail_close Bad_message wire.sock
