@@ -3,6 +3,7 @@ open Lwt
 open Lwt_unix
 
 let receive_timeout = 3.
+let max_message_size = 20000;
 
 type t = {
   sock : file_descr;
@@ -48,7 +49,8 @@ let close wire = shutdown wire.sock SHUTDOWN_ALL
 let receive wire =
   lwt lenstr = receive_string wire.sock 4 in
   let len = (Char.code lenstr.[0] lsl 24) lor (Char.code lenstr.[1] lsl 16) lor (Char.code lenstr.[2] lsl 8) lor (Char.code lenstr.[3]) in
-  receive_string wire.sock len
+  if len > max_message_size then fail_close Bad_message wire.sock
+  else receive_string wire.sock len
 
 open Bencode
 
