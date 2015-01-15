@@ -74,7 +74,7 @@ let bdecode s = try
     let Int s = Dict.find k d in
     s
   in
-  let Dict d = decode s in
+  let Dict d, _ = decode s in
   let tid = gets "t" d in
   match gets "y" d with
   | "q" -> begin

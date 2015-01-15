@@ -37,4 +37,4 @@ val encode : t -> string
 
 exception Parse_error
 
-val decode : string -> t
+val decode : string -> t * int

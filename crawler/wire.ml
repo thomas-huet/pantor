@@ -57,7 +57,7 @@ open Bencode
 let extended_handshake wire =
   lwt hand = receive wire in
   if String.length hand > 2 && hand.[0] = '\020' && hand.[1] = '\000' then try_lwt
-    let Dict handshake = decode (String.sub hand 2 (String.length hand - 2)) in
+    let Dict handshake, _ = decode (String.sub hand 2 (String.length hand - 2)) in
     let Int metadata_size = Dict.find "metadata_size" handshake in
     let Dict m = Dict.find "m" handshake in
     let Int ut_metadata = Dict.find "ut_metadata" m in

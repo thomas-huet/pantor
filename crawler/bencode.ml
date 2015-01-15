@@ -95,4 +95,4 @@ let decode s =
         Dict.add k v (parse_dict ())
       | _ -> raise Parse_error
   in
-  decode ()
+  decode (), !pos
