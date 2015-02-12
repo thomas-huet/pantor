@@ -101,11 +101,10 @@ let send_string sock dst str =
 let delay n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
 
 let request_metadata peer infohash = try_lwt
-  let open Wire in
   lwt () = delay wait_time in
+  let open Wire in
   lwt wire = create peer infohash in
-  lwt wire = extended_handshake wire in
-  lwt () = log wire in
+  lwt metadata = get_metadata wire in
   (* TODO *)
   return (close wire)
 with _ -> return ()
