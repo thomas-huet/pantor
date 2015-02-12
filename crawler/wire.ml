@@ -223,8 +223,11 @@ let get_metadata wire =
             in
             Array.iter add raw;
             let s = Buffer.contents buf in
-            (* TODO: check SHA1 *)
-            begin try
+            let sha1 = Cryptokit.Hash.sha1 () in
+            sha1#add_string s;
+            if wire.info_hash <> sha1#result then
+              fail_close (Bad_wire "Incorrect hash") wire.sock
+            else begin try
               let Dict meta, _ = decode s in
               let String name = Dict.find "name" meta in
               let Int piece_length = Dict.find "piece length" meta in
