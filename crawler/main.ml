@@ -15,7 +15,7 @@ let bootstrap_nodes = [
   ADDR_INET (inet_addr_of_string "91.121.60.42", 6881);
   ADDR_INET (inet_addr_of_string "212.129.33.50", 6881);
 ]
-let wait_time = 10
+let wait_time = 30
 
 let my_ip =
   if Array.length Sys.argv = 2 then inet_addr_of_string Sys.argv.(1)
@@ -100,14 +100,22 @@ let send_string sock dst str =
 
 let delay n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
 
-let request_metadata peer infohash = try_lwt
-  lwt () = delay wait_time in
-  let open Wire in
-  lwt wire = create peer infohash in
-  lwt metadata = get_metadata wire in
-  (* TODO *)
-  return (close wire)
-with _ -> return ()
+let lru = Lru.create 1000
+
+let request_metadata peer infohash =
+  if Lru.mem lru infohash then begin
+    Lru.add lru infohash;
+    return_unit
+  end else try_lwt
+    lwt () = delay wait_time in
+    let open Wire in
+    lwt wire = create peer infohash in
+    lwt metadata = get_metadata wire in
+    close wire;
+    (* TODO *)
+    Lru.add lru infohash;
+    return_unit
+  with Wire.Bad_wire _ -> return_unit
 
 let answer i orig = function
 | Ping (tid, _) ->
