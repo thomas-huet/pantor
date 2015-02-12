@@ -139,7 +139,7 @@ let send_message sock msg =
 
 let create addr infohash =
   let sock = socket PF_INET SOCK_STREAM 0 in
-  lwt () = connect sock addr in
+  lwt () = pick [timeout receive_timeout; connect sock addr] in
   let peer_id = "Pantor              " in
   let header = "\019BitTorrent protocol\000\000\000\000\000\x10\000\000" in
   lwt _ = send sock (header ^ infohash ^ peer_id) 0 68 [] in
