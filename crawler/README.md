@@ -3,10 +3,11 @@
 ## Dependencies
 
 - [Lwt](http://ocsigen.org/lwt/)
+- cryptokit
 
-You can install it with [OPAM](http://opam.ocaml.org/):
+You can install them with [OPAM](http://opam.ocaml.org/):
 
-`opam install lwt`
+`opam install lwt cryptokit`
 
 ## Build
 
