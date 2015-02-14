@@ -44,7 +44,7 @@ let input_binary_int ic =
   return ((Char.code a lsl 24)
       lor (Char.code b lsl 16)
       lor (Char.code c lsl 8)
-      lor (Char.code c))
+      lor (Char.code d))
 
 let really_input = Lwt_io.read_into_exactly
 
