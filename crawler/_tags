@@ -1,3 +1,5 @@
 true: syntax(camlp4o)
-true: package(cryptokit), package(pgocaml)
-true: package(lwt), package(lwt.syntax), package(unix), package(lwt.unix)
+true: package(cryptokit)
+true: package(pgocaml), package(pgocaml.syntax)
+true: package(unix)
+true: package(lwt), package(lwt.syntax), package(lwt.unix)

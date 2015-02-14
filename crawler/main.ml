@@ -2,8 +2,10 @@ open Lwt
 open Unix
 open Lwt_unix
 
+module PGOCaml = PGOCaml_generic.Make(Thread)
+
 let base_port = 2000
-let n_bits = 9
+let n_bits = 14
 let timeout_good_nodes = 7 * 60
 let k_bits = 3
 let token = "token"
@@ -96,26 +98,35 @@ let send_string sock dst str =
   lwt _ = sendto sock str 0 (String.length str) [] dst in
   return ()
 
-let delay n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
+let wait n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
 
 let lru = Lru.create 1000
 
-let request_metadata peer infohash =
+let request_metadata db delay peer infohash () =
   if Lru.mem lru infohash then begin
     Lru.add lru infohash;
     return_unit
   end else try_lwt
-    lwt () = delay wait_time in
+    lwt () = wait delay in
     let open Wire in
     lwt wire = create peer infohash in
     lwt metadata = get_metadata wire in
     close wire;
-    (* TODO *)
+    let add name size =
+      let size = Int32.of_int size in
+      PGSQL(db) "INSERT INTO file(torrent, name, size)
+		 VALUES($infohash, $name, $size)"
+    in
+    begin match metadata.files with
+    | [[name], size] -> add name size
+    | l ->
+      add metadata.name 0 (* TODO *)
+    end;
     Lru.add lru infohash;
     return_unit
   with Wire.Bad_wire _ -> return_unit
 
-let answer i orig = function
+let answer db i orig = function
 | Ping (tid, _) ->
   Pong (tid, ids.(i))
   |> bencode
@@ -126,7 +137,7 @@ let answer i orig = function
   |> send_string sockets.(i) orig
 | Get_peers (tid, nid, infohash) ->
   let _ =
-    lwt () = delay wait_time in
+    lwt () = wait wait_time in
     Get_peers (infohash, ids.(i), infohash)
     |> bencode
     |> send_string sockets.(i) orig
@@ -142,18 +153,18 @@ let answer i orig = function
       let ADDR_INET (ip, _) = orig in
       ADDR_INET (ip, port)
   in
-  let _ = request_metadata addr infohash in
+  let () = async (request_metadata db wait_time addr infohash) in
   return ()
 | Pong (tid, nid) -> return (add_node (nid, orig))
 | Got_peers (infohash, nid, token, peers) ->
-  let _ =
-    Lwt_list.iter_p (fun peer -> request_metadata peer infohash) peers
+  let () =
+    List.iter (fun peer -> async (request_metadata db 0 peer infohash)) peers
   in
   return ()
 | Error (_, _, _)
 | Got_nodes (_, _, _, _) -> return ()
 
-let rec thread i =
+let rec thread db i =
   let buf = Bytes.create 512 in
   lwt (_, orig) = recvfrom sockets.(i) buf 0 512 [] in
   let msg = try
@@ -161,8 +172,8 @@ let rec thread i =
   with _ -> Error ("", 0, "")
   in
   lwt () = Log.input orig msg in
-  lwt () = answer i orig msg in
-  thread i
+  lwt () = answer db i orig msg in
+  thread db i
 
 let bootstrap =
   let ping addr =
@@ -208,14 +219,14 @@ let rec supervisor i =
         in
         supervisor (i + 1)
   else
-    lwt () = delay timeout_good_nodes in
+    lwt () = wait timeout_good_nodes in
     supervisor 0
 
-let threads =
-  let rec init n =
-    if n = 0 then []
-    else thread n :: init (n - 1)
-  in
-  init (1 lsl n_bits)
+let main =
+  lwt db = PGOCaml.connect () in
+  for i = 0 to (1 lsl n_bits) - 1 do
+    async (fun () -> thread db i)
+  done;
+  supervisor 0
 
-let () = Lwt_main.run (supervisor 0)
+let () = Lwt_main.run main

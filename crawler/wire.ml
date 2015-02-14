@@ -152,8 +152,11 @@ let create addr infohash =
       fail_close (Bad_wire "No support for extended protocol") sock
     else
       lwt info_hash = receive_string sock 20 in
-      lwt peer_id = receive_string sock 20 in
-      return {sock; info_hash; peer_id}
+      if info_hash <> infohash then
+        fail_close (Bad_wire "Infohash does not match") sock
+      else
+	lwt peer_id = receive_string sock 20 in
+	return {sock; info_hash; peer_id}
 
 open Bencode
 
