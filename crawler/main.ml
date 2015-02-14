@@ -1,5 +1,3 @@
-open Batteries
-
 open Lwt
 open Unix
 open Lwt_unix
@@ -213,6 +211,11 @@ let rec supervisor i =
     lwt () = delay timeout_good_nodes in
     supervisor 0
 
-let threads = List.init (1 lsl n_bits) thread
+let threads =
+  let rec init n =
+    if n = 0 then []
+    else thread n :: init (n - 1)
+  in
+  init (1 lsl n_bits)
 
 let () = Lwt_main.run (supervisor 0)

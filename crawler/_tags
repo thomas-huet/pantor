@@ -1,3 +1,3 @@
 true: syntax(camlp4o)
-true: package(batteries)
-true: package(lwt), package(lwt.syntax), package(unix), package(lwt.unix), package(cryptokit)
+true: package(cryptokit)
+true: package(lwt), package(lwt.syntax), package(unix), package(lwt.unix)
