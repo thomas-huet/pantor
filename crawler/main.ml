@@ -132,7 +132,7 @@ let request_metadata db delay peer infohash () =
 	end;
 	Lru.add lru infohash;
 	return_unit
-      with Bad_wire _ -> return_unit
+      with Bad_wire _ | Timeout -> return_unit
 
 let answer db i orig = function
 | Ping (tid, _) ->
