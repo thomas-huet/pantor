@@ -106,25 +106,33 @@ let request_metadata db delay peer infohash () =
   if Lru.mem lru infohash then begin
     Lru.add lru infohash;
     return_unit
-  end else try_lwt
-    lwt () = wait delay in
-    let open Wire in
-    lwt wire = create peer infohash in
-    lwt metadata = get_metadata wire in
-    close wire;
-    let add name size =
-      let size = Int32.of_int size in
-      PGSQL(db) "INSERT INTO file(torrent, name, size)
-		 VALUES($infohash, $name, $size)"
-    in
-    begin match metadata.files with
-    | [[name], size] -> add name size
-    | l ->
-      add metadata.name 0 (* TODO *)
-    end;
-    Lru.add lru infohash;
-    return_unit
-  with Wire.Bad_wire _ -> return_unit
+  end else
+    lwt witness = PGSQL(db) "SELECT torrent FROM file WHERE torrent = $infohash LIMIT 1" in
+    if witness <> [] then
+      Lru.add lru infohash;
+      return_unit
+    else
+      lwt () = wait delay in
+      let open Wire in
+      try_lwt
+	lwt wire = create peer infohash in
+	lwt metadata = get_metadata wire in
+	close wire;
+	let add name size =
+	  lwt () = Lwt_io.printf "%s\t%d\n" name size in
+	  let size = Int32.of_int size in
+	  PGSQL(db) "INSERT INTO file(torrent, name, size)
+		     VALUES($infohash, $name, $size)"
+	in
+	begin match metadata.files with
+	| [[name], size] -> add name size
+	| l ->
+	  let total = List.fold_left (fun a (_, b) -> a + b) 0 l in
+	  add metadata.name total (* TODO *)
+	end;
+	Lru.add lru infohash;
+	return_unit
+      with Bad_wire _ -> return_unit
 
 let answer db i orig = function
 | Ping (tid, _) ->
