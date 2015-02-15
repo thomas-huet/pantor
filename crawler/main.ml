@@ -15,6 +15,7 @@ let bootstrap_nodes = [
   ADDR_INET (inet_addr_of_string "212.129.33.50", 6881);
 ]
 let wait_time = 30.
+let ping_n = 10
 
 let my_ip, base_port =
   if Array.length Sys.argv = 3 then
@@ -200,13 +201,13 @@ let rec thread db i =
   thread db i
 
 let bootstrap () =
-  let ping addr =
+  let find_node addr =
     let i = Random.int (1 lsl n_bits) in
     Find_node ("tr", ids.(i), ids.(i))
     |> bencode
     |> send_string sockets.(i) addr
   in
-  Lwt_list.iter_s ping bootstrap_nodes
+  Lwt_list.iter_s find_node bootstrap_nodes
 
 let close_node i =
   let rec scan j bits =
@@ -227,11 +228,15 @@ let rec supervisor i =
     match good_nodes.(i) with
     | Good ((_, addr) as node) -> begin
       good_nodes.(i) <- Unknown node;
-      lwt () =
-        Ping ("tr", ids.(i))
+      let ping () =
+        let j = Random.int (1 lsl n_bits) in
+        Ping ("tr", ids.(j))
         |> bencode
-        |> send_string sockets.(i) addr
+        |> send_string sockets.(j) addr
       in
+      for j = 1 to ping_n do
+        async ping
+      done;
       supervisor (i + 1)
     end
     | Unknown _ | Empty ->
