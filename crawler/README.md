@@ -21,6 +21,6 @@ The database server must be available at compile time and at run time.
 
 Assuming your ip is `1.2.3.4` and you want to use ports 1337 to 1337+511:
 
-   ./main.native 1.2.3.4 1337
+    ./main.native 1.2.3.4 1337
 
 You can run several instances at the same time (just make sure their ports ranges don't overlap if they are on the same machine).
