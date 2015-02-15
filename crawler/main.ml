@@ -133,12 +133,16 @@ let request_metadata db delay peer infohash () =
 	  PGSQL(db) "INSERT INTO file(torrent, name, size)
 		     VALUES($infohash, $name, $size)"
 	in
-	begin match metadata.files with
-	| [[name], size] -> add name size
-	| l ->
-	  let total = List.fold_left (fun a (_, b) -> a + b) 0 l in
-	  add metadata.name total (* TODO *)
-	end;
+	let total = List.fold_left (fun a (_, b) -> a + b) 0 metadata.files in
+	lwt () = add (Yojson.Basic.to_string (`String metadata.name)) total in
+        lwt () = match metadata.files with
+        | [[], _] -> return_unit
+        | _ ->
+          Lwt_list.iter_s
+            (fun (path, size) ->
+              add (Yojson.Basic.to_string (`List (List.map (fun s -> `String s) path))) size)
+            metadata.files
+        in
 	Lru.add lru infohash;
 	return_unit
       with

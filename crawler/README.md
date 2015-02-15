@@ -5,10 +5,11 @@
 - [Lwt](http://ocsigen.org/lwt/)
 - cryptokit
 - [PG'OCaml](http://pgocaml.forge.ocamlcore.org/)
+- [Yojson](http://mjambon.com/yojson.html)
 
 You can install them with [OPAM](http://opam.ocaml.org/):
 
-    opam install lwt cryptokit pgocaml
+    opam install lwt cryptokit pgocaml yojson
 
 You also need a running [PostgreSQL](http://www.postgresql.org/) server and environment variable `$PGDATABASE` set to `pantor` (and if the database is not local, connection information should be stored in `$PGUSER`, `$PGPASSWORD`, `$PGHOST` and `$PGPORT`).
 The database server must be available at compile time and at run time.

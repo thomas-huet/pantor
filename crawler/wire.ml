@@ -241,7 +241,7 @@ let get_metadata wire =
               let files =
                 if Dict.mem "length" meta then
                   let Int length = Dict.find "length" meta in
-                  [[name], length]
+                  [[], length]
                 else
                   let List l = Dict.find "files" meta in
                   let extract (Dict file) =
