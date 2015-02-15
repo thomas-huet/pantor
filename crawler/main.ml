@@ -4,7 +4,6 @@ open Lwt_unix
 
 module PGOCaml = PGOCaml_generic.Make(Thread)
 
-let base_port = 2000
 let n_bits = 9
 let timeout_good_nodes = 7 * 60
 let k_bits = 3
@@ -17,10 +16,11 @@ let bootstrap_nodes = [
 ]
 let wait_time = 30
 
-let my_ip =
-  if Array.length Sys.argv = 2 then inet_addr_of_string Sys.argv.(1)
+let my_ip, base_port =
+  if Array.length Sys.argv = 3 then
+    inet_addr_of_string Sys.argv.(1), int_of_string Sys.argv.(2)
   else
-    let () = Printf.printf "usage: pantor ip\n" in
+    let () = Printf.printf "usage: pantor ip port_low\n" in
     exit 1
 
 let create_socket i =
