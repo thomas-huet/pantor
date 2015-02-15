@@ -54,12 +54,7 @@ let () = randomize_ids ()
 
 open Kprc
 
-type status =
-| Good of ninfo
-| Unknown of ninfo
-| Empty
-
-let good_nodes = Array.make (1 lsl n_bits) Empty
+let good_nodes = Array.make (1 lsl n_bits) ([], [])
 
 let read_int n s =
   let rec read_int n i =
@@ -73,39 +68,38 @@ let send_string sock dst str =
   return_unit
 
 let get_nodes target =
-  let i = read_int (n_bits - k_bits + 1) target lsl (k_bits - 1) in
-  let rec loop j =
-    if j <= 0 then [] else
-    let good_node = match good_nodes.(i + j - 1) with
-    | Empty ->
-      let k = Random.int (1 lsl n_bits) in
-      ids.(k), ADDR_INET (my_ip, base_port + k)
-    | Good node | Unknown node -> node
-    in
-    (ids.(i + j - 1), ADDR_INET (my_ip, base_port + i + j - 1))
-    :: good_node
-    :: loop (j - 1)
-  in
-  loop (1 lsl (k_bits - 1))
+  let i = read_int n_bits target in
+  let good, unknown = good_nodes.(i) in
+  good @ unknown
 
 let propose_good ((nid, ADDR_INET (ip, port)) as node) =
   if ip <> my_ip then
   let i = read_int n_bits nid in
-  match good_nodes.(i) with
-  | Good _ -> ()
-  | Empty | Unknown _ -> good_nodes.(i) <- Good node
+  let good, unknown = good_nodes.(i) in
+  if List.mem node good then ()
+  else if List.mem node unknown then
+    good_nodes.(i) <- node :: good, List.filter ((<>) node) unknown
+  else if List.length good + List.length unknown < (1 lsl k_bits) then
+    good_nodes.(i) <- node :: good, unknown
+  else if unknown = [] then ()
+  else
+    good_nodes.(i) <- node :: good, List.tl unknown
 
 let propose_unknown ((nid, ADDR_INET (ip, port)) as node) =
   if ip <> my_ip then
   let i = read_int n_bits nid in
-  match good_nodes.(i) with
-  | Good _ -> ()
-  | Empty | Unknown _ -> 
+  let good, unknown = good_nodes.(i) in
+  if List.mem node good then ()
+  else begin
     async (fun () ->
       Ping ("tr", ids.(i))
       |> bencode
       |> send_string sockets.(i) (ADDR_INET (ip, port)));
-    good_nodes.(i) <- Unknown node
+    if not (List.mem node unknown)
+       && List.length good + List.length unknown < (1 lsl k_bits)
+    then
+      good_nodes.(i) <- good, node :: unknown
+  end
 
 let wait d = catch (fun () -> timeout d) (fun _ -> return ());;
 
@@ -217,8 +211,8 @@ let close_node i =
   let rec scan j bits =
     if j < (1 lsl bits) then
       match good_nodes.(((i lsr bits) lsl bits) + j) with
-      | Good node | Unknown node -> Some (j, node)
-      | Empty -> scan (j + 1) bits
+      | node :: _, _ | [], node :: _ -> Some (j, node)
+      | [], [] -> scan (j + 1) bits
     else
       if bits >= n_bits then None else
       scan 0 (bits + 1)
@@ -229,21 +223,19 @@ let rec supervisor i =
   if i = 0 then async bootstrap;
   if i < 1 lsl n_bits then
     lwt () = wait (timeout_good_nodes /. float (1 lsl n_bits)) in
-    match good_nodes.(i) with
-    | Good ((_, addr) as node) -> begin
-      good_nodes.(i) <- Unknown node;
-      let ping () =
-        let j = Random.int (1 lsl n_bits) in
-        Ping ("tr", ids.(j))
-        |> bencode
-        |> send_string sockets.(j) addr
-      in
+    let good, _ = good_nodes.(i) in
+    good_nodes.(i) <- [], good;
+    let ping (_, addr) =
       for j = 1 to ping_n do
-        async ping
-      done;
-      supervisor (i + 1)
-    end
-    | Unknown _ | Empty ->
+        async (fun () ->
+          let j = Random.int (1 lsl n_bits) in
+	  Ping ("tr", ids.(j))
+	  |> bencode
+	  |> send_string sockets.(j) addr)
+      done
+    in
+    List.iter ping good;
+    if List.length good < (1 lsl k_bits) then
       match close_node i with
       | None -> supervisor (i + 1)
       | Some (j, (_, addr)) ->
@@ -253,6 +245,8 @@ let rec supervisor i =
           |> send_string sockets.(i) addr
         in
         supervisor (i + 1)
+    else
+      supervisor (i + 1)
   else
     supervisor 0
 
