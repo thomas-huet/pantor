@@ -67,6 +67,10 @@ let read_int n s =
   in
   read_int n 0
 
+let send_string sock dst str =
+  lwt _ = sendto sock str 0 (String.length str) [] dst in
+  return_unit
+
 let get_nodes target =
   let i = read_int (n_bits - k_bits + 1) target lsl (k_bits - 1) in
   let rec loop j =
@@ -83,20 +87,24 @@ let get_nodes target =
   in
   loop (1 lsl (k_bits - 1))
 
-let add_node (nid, addr) =
-  let i = read_int n_bits nid in
-  good_nodes.(i) <- Good (nid, addr)
-
-let propose_node ((nid, ADDR_INET (ip, port)) as node) =
+let propose_good ((nid, ADDR_INET (ip, port)) as node) =
   if ip <> my_ip then
   let i = read_int n_bits nid in
   match good_nodes.(i) with
-  | Empty | Unknown _ -> good_nodes.(i) <- Good node
   | Good _ -> ()
+  | Empty | Unknown _ -> good_nodes.(i) <- Good node
 
-let send_string sock dst str =
-  lwt _ = sendto sock str 0 (String.length str) [] dst in
-  return ()
+let propose_unknown ((nid, ADDR_INET (ip, port)) as node) =
+  if ip <> my_ip then
+  let i = read_int n_bits nid in
+  match good_nodes.(i) with
+  | Good _ -> ()
+  | Empty | Unknown _ -> 
+    async (fun () ->
+      Ping ("tr", ids.(i))
+      |> bencode
+      |> send_string sockets.(i) (ADDR_INET (ip, port)));
+    good_nodes.(i) <- Unknown node
 
 let wait n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
 
@@ -153,7 +161,9 @@ let answer db i orig = function
   Got_nodes (tid, ids.(i), token, get_nodes infohash)
   |> bencode
   |> send_string sockets.(i) orig
-| Found_node (tid, nid, nodes) -> return (List.iter propose_node nodes)
+| Found_node (tid, nid, nodes) ->
+  List.iter propose_unknown nodes;
+  return_unit
 | Announce_peer (tid, nid, _, infohash, port, implied) ->
   let addr =
     if implied then orig
@@ -162,15 +172,17 @@ let answer db i orig = function
       ADDR_INET (ip, port)
   in
   let () = async (request_metadata db wait_time addr infohash) in
-  return ()
-| Pong (tid, nid) -> return (add_node (nid, orig))
+  return_unit
+| Pong (tid, nid) ->
+  propose_good (nid, orig);
+  return_unit
 | Got_peers (infohash, nid, token, peers) ->
   let () =
     List.iter (fun peer -> async (request_metadata db 0 peer infohash)) peers
   in
-  return ()
+  return_unit
 | Error (_, _, _)
-| Got_nodes (_, _, _, _) -> return ()
+| Got_nodes (_, _, _, _) -> return_unit
 
 let rec thread db i =
   let buf = Bytes.create 512 in
@@ -186,7 +198,7 @@ let rec thread db i =
 let bootstrap =
   let ping addr =
     let i = Random.int (1 lsl n_bits) in
-    Ping ("tr", ids.(i))
+    Find_node ("tr", ids.(i), ids.(i))
     |> bencode
     |> send_string sockets.(i) addr
   in
@@ -221,9 +233,9 @@ let rec supervisor i =
       | None -> supervisor (i + 1)
       | Some (j, (_, addr)) ->
 	lwt () =
-          Find_node ("tr", ids.(j), ids.(i))
+          Find_node ("tr", ids.(i), ids.(i))
           |> bencode
-          |> send_string sockets.(j) addr
+          |> send_string sockets.(i) addr
         in
         supervisor (i + 1)
   else
