@@ -4,6 +4,8 @@ open Lwt_unix
 
 module PGOCaml = PGOCaml_generic.Make(Thread)
 
+module S = Set.Make(String)
+
 let n_bits = 9
 let timeout_good_nodes = 7. *. 60.
 let k_bits = 3
@@ -105,45 +107,85 @@ let wait d = catch (fun () -> timeout d) (fun _ -> return ());;
 
 let lru = Lru.create 1000
 
-let request_metadata db delay peer infohash () =
+let nodes_for_hash = Hashtbl.create 42
+
+let is_done db infohash =
   if Lru.mem lru infohash then begin
     Lru.add lru infohash;
-    return_unit
+    return_true
   end else
     lwt witness = PGSQL(db) "SELECT torrent FROM file WHERE torrent = $infohash LIMIT 1" in
-    if witness <> [] then begin
+    if witness <> [] || Lru.mem lru infohash then begin
       Lru.add lru infohash;
-      return_unit
+      return_true
     end else
-      lwt () = wait delay in
-      let open Wire in
-      try_lwt
-	lwt wire = create peer infohash in
-	lwt metadata = get_metadata wire in
-	close wire;
-	let add name size =
-	  lwt () = Lwt_io.printf "%s\t%d\n" name size in
-	  let size = Int64.of_int size in
-	  PGSQL(db) "INSERT INTO file(torrent, name, size)
-		     VALUES($infohash, $name, $size)"
-	in
-	let total = List.fold_left (fun a (_, b) -> a + b) 0 metadata.files in
-	lwt () = add (Yojson.Basic.to_string (`String metadata.name)) total in
-        lwt () = match metadata.files with
-        | [[], _] -> return_unit
-        | _ ->
-          Lwt_list.iter_s
-            (fun (path, size) ->
-              add (Yojson.Basic.to_string (`List (List.map (fun s -> `String s) path))) size)
-            metadata.files
-        in
-	Lru.add lru infohash;
-	return_unit
-      with
-      | Bad_wire s ->
-        Lwt_io.printf "/!\\ Bad wire \"%s\"\n" s
-      | Timeout ->
-        Lwt_io.printf "/!\\ Timeout\n"
+      return_false
+
+let mark_done infohash =
+  Lru.add lru infohash;
+  try Hashtbl.remove nodes_for_hash infohash with Not_found -> ()
+
+let request_metadata db delay peer infohash () =
+  lwt already = is_done db infohash in
+  if already then return_unit else
+  lwt () = wait delay in
+  let open Wire in
+  try_lwt
+    lwt wire = create peer infohash in
+    lwt metadata = get_metadata wire in
+    close wire;
+    lwt already = is_done db infohash in
+    if already then return_unit else begin
+      mark_done infohash;
+      let add name size =
+	lwt () = Lwt_io.printf "%s\t%d\n" name size in
+	let size = Int64.of_int size in
+	PGSQL(db) "INSERT INTO file(torrent, name, size)
+		   VALUES($infohash, $name, $size)"
+      in
+      let total = List.fold_left (fun a (_, b) -> a + b) 0 metadata.files in
+      lwt () = add (Yojson.Basic.to_string (`String metadata.name)) total in
+      lwt () = match metadata.files with
+      | [[], _] -> return_unit
+      | _ ->
+	Lwt_list.iter_s
+	  (fun (path, size) ->
+	    add (Yojson.Basic.to_string (`List (List.map (fun s -> `String s) path))) size)
+	  metadata.files
+      in
+      return_unit
+    end
+  with
+  | Bad_wire s ->
+    Lwt_io.printf "/!\\ Bad wire \"%s\"\n" s
+  | Timeout ->
+    Lwt_io.printf "/!\\ Timeout\n"
+
+let hunt db infohash nodes () =
+  lwt finished = is_done db infohash in
+  if finished then return_unit
+  else begin
+    let already = try
+      Hashtbl.find nodes_for_hash infohash
+    with Not_found -> begin
+      Hashtbl.add nodes_for_hash infohash S.empty;
+      S.empty
+    end
+    in
+    let query already (node, addr) =
+      if S.mem node already then already
+      else begin
+        async (fun () ->
+          let i = Random.int (1 lsl n_bits) in
+	  Get_peers (infohash, ids.(i), infohash)
+	  |> bencode
+	  |> send_string sockets.(i) addr);
+        S.add node already
+      end
+    in
+    Hashtbl.replace nodes_for_hash infohash (List.fold_left query already nodes);
+    return_unit
+  end
 
 let answer db i orig = function
 | Ping (tid, _) ->
@@ -155,12 +197,7 @@ let answer db i orig = function
   |> bencode
   |> send_string sockets.(i) orig
 | Get_peers (tid, nid, infohash) ->
-  let _ =
-    lwt () = wait wait_time in
-    Get_peers (infohash, ids.(i), infohash)
-    |> bencode
-    |> send_string sockets.(i) orig
-  in
+  async (hunt db infohash (get_nodes infohash));
   Got_nodes (tid, ids.(i), token, get_nodes infohash)
   |> bencode
   |> send_string sockets.(i) orig
@@ -184,8 +221,10 @@ let answer db i orig = function
     List.iter (fun peer -> async (request_metadata db 0. peer infohash)) peers
   in
   return_unit
-| Error (_, _, _)
-| Got_nodes (_, _, _, _) -> return_unit
+| Got_nodes (infohash, _, _, nodes) ->
+  async (hunt db infohash nodes); 
+  return_unit
+| Error (_, _, _) -> return_unit
 
 let rec thread db i =
   let buf = Bytes.create 512 in
