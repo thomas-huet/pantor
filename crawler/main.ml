@@ -5,7 +5,7 @@ open Lwt_unix
 module PGOCaml = PGOCaml_generic.Make(Thread)
 
 let n_bits = 9
-let timeout_good_nodes = 7 * 60
+let timeout_good_nodes = 7. *. 60.
 let k_bits = 3
 let token = "token"
 let bootstrap_nodes = [
@@ -14,7 +14,7 @@ let bootstrap_nodes = [
   ADDR_INET (inet_addr_of_string "91.121.60.42", 6881);
   ADDR_INET (inet_addr_of_string "212.129.33.50", 6881);
 ]
-let wait_time = 30
+let wait_time = 30.
 
 let my_ip, base_port =
   if Array.length Sys.argv = 3 then
@@ -106,7 +106,7 @@ let propose_unknown ((nid, ADDR_INET (ip, port)) as node) =
       |> send_string sockets.(i) (ADDR_INET (ip, port)));
     good_nodes.(i) <- Unknown node
 
-let wait n = catch (fun () -> timeout (float n)) (fun _ -> return ());;
+let wait d = catch (fun () -> timeout d) (fun _ -> return ());;
 
 let lru = Lru.create 1000
 
@@ -178,7 +178,7 @@ let answer db i orig = function
   return_unit
 | Got_peers (infohash, nid, token, peers) ->
   let () =
-    List.iter (fun peer -> async (request_metadata db 0 peer infohash)) peers
+    List.iter (fun peer -> async (request_metadata db 0. peer infohash)) peers
   in
   return_unit
 | Error (_, _, _)
