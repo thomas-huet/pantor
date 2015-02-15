@@ -195,7 +195,7 @@ let rec thread db i =
   lwt () = answer db i orig msg in
   thread db i
 
-let bootstrap =
+let bootstrap () =
   let ping addr =
     let i = Random.int (1 lsl n_bits) in
     Find_node ("tr", ids.(i), ids.(i))
@@ -217,7 +217,9 @@ let close_node i =
   scan 0 1
 
 let rec supervisor i =
+  if i = 0 then async bootstrap;
   if i < 1 lsl n_bits then
+    lwt () = wait (timeout_good_nodes /. float (1 lsl n_bits)) in
     match good_nodes.(i) with
     | Good ((_, addr) as node) -> begin
       good_nodes.(i) <- Unknown node;
@@ -239,7 +241,6 @@ let rec supervisor i =
         in
         supervisor (i + 1)
   else
-    lwt () = wait timeout_good_nodes in
     supervisor 0
 
 let main = try_lwt
