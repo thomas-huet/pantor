@@ -5,7 +5,7 @@ open Lwt_unix
 module PGOCaml = PGOCaml_generic.Make(Thread)
 
 let base_port = 2000
-let n_bits = 14
+let n_bits = 9
 let timeout_good_nodes = 7 * 60
 let k_bits = 3
 let token = "token"
