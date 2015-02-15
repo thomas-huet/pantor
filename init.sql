@@ -1,7 +1,7 @@
 CREATE TABLE file(
   torrent TEXT NOT NULL,
   name TEXT NOT NULL,
-  size INTEGER NOT NULL,
+  size BIGINT NOT NULL,
   UNIQUE(torrent, name)
 );
 

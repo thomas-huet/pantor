@@ -129,7 +129,7 @@ let request_metadata db delay peer infohash () =
 	close wire;
 	let add name size =
 	  lwt () = Lwt_io.printf "%s\t%d\n" name size in
-	  let size = Int32.of_int size in
+	  let size = Int64.of_int size in
 	  PGSQL(db) "INSERT INTO file(torrent, name, size)
 		     VALUES($infohash, $name, $size)"
 	in
