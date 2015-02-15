@@ -108,10 +108,10 @@ let request_metadata db delay peer infohash () =
     return_unit
   end else
     lwt witness = PGSQL(db) "SELECT torrent FROM file WHERE torrent = $infohash LIMIT 1" in
-    if witness <> [] then
+    if witness <> [] then begin
       Lru.add lru infohash;
       return_unit
-    else
+    end else
       lwt () = wait delay in
       let open Wire in
       try_lwt
