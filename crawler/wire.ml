@@ -57,7 +57,11 @@ let receive_string sock len =
   let buf = Bytes.create len in
   let rec read_all i =
     if i < len then
-      lwt n = pick [timeout receive_timeout; recv sock buf i (len - i) []] in
+      lwt n = try_lwt
+        pick [timeout receive_timeout; recv sock buf i (len - i) []]
+      with Unix_error(ECONNRESET, "recv", "") ->
+        fail_close (Bad_wire "Connection reset by peer") sock
+      in
       if n = 0 then
         fail_close (Bad_wire "Can't read") sock
       else
@@ -139,27 +143,28 @@ let send_message sock msg =
 
 let create addr infohash =
   let sock = socket PF_INET SOCK_STREAM 0 in
-  try_lwt
-    lwt () = pick [timeout receive_timeout; connect sock addr] in
-    let peer_id = "Pantor              " in
-    let header = "\019BitTorrent protocol\000\000\000\000\000\x10\000\000" in
-    lwt _ = send sock (header ^ infohash ^ peer_id) 0 68 [] in
-    lwt pstr = receive_string sock 20 in
-    if pstr <> "\019BitTorrent protocol" then
-      fail_close (Bad_wire "Wrong protocol") sock
-    else
-      lwt features = receive_string sock 8 in
-      if Char.code features.[5] land 0x10 <> 0x10 then
-	fail_close (Bad_wire "No support for extended protocol") sock
-      else
-	lwt info_hash = receive_string sock 20 in
-	if info_hash <> infohash then
-	  fail_close (Bad_wire "Infohash does not match") sock
-	else
-	  lwt peer_id = receive_string sock 20 in
-	  return {sock; info_hash; peer_id}
+  lwt () = try_lwt
+    pick [timeout receive_timeout; connect sock addr]
   with Unix_error(ECONNREFUSED, "connect", "") ->
     fail_close (Bad_wire "Connection failed") sock
+  in
+  let peer_id = "Pantor              " in
+  let header = "\019BitTorrent protocol\000\000\000\000\000\x10\000\000" in
+  lwt _ = send sock (header ^ infohash ^ peer_id) 0 68 [] in
+  lwt pstr = receive_string sock 20 in
+  if pstr <> "\019BitTorrent protocol" then
+    fail_close (Bad_wire "Wrong protocol") sock
+  else
+    lwt features = receive_string sock 8 in
+    if Char.code features.[5] land 0x10 <> 0x10 then
+      fail_close (Bad_wire "No support for extended protocol") sock
+    else
+      lwt info_hash = receive_string sock 20 in
+      if info_hash <> infohash then
+	fail_close (Bad_wire "Infohash does not match") sock
+      else
+	lwt peer_id = receive_string sock 20 in
+	return {sock; info_hash; peer_id}
 
 open Bencode
 
