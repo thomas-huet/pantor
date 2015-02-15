@@ -22,14 +22,8 @@ let input (ADDR_INET (ip, port)) msg = begin
   match msg with
   | Ping (_, nid) ->
     printf "%a Ping from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port
-  | Pong (_, nid) ->
-    printf "%a Pong from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port
   | Find_node (_, nid, target) ->
     printf "%a Find_node %s from %s (%s:%d)\n" date () (hex target) (hex nid) (string_of_inet_addr ip) port
-  | Found_node (_, nid, nodes) -> begin
-    lwt () = printf "%a Found_node from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
-    Lwt_list.iter_s (fun (nid, ADDR_INET (ip, port)) -> printf "%s (%s:%d)\n" (hex nid) (string_of_inet_addr ip) port) nodes
-  end
   | Get_peers (_, nid, target) ->
     printf "%a Get_peers for %s from %s (%s:%d)\n" date () (hex target) (hex nid) (string_of_inet_addr ip) port
   | Got_peers (_, nid, _, peers) ->
@@ -45,4 +39,11 @@ let input (ADDR_INET (ip, port)) msg = begin
     printf "%a Announce_peer %s (%s:%d) for %s (%s)\n" date () (hex nid) (string_of_inet_addr ip) port (hex infohash) (hex token)
   | Error (_, code, descr) ->
     printf "%a Error %d: \"%s\" from %s:%d\n" date () code descr (string_of_inet_addr ip) port
+  | _ -> Lwt.return_unit
+  | Pong (_, nid) ->
+    printf "%a Pong from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port
+  | Found_node (_, nid, nodes) -> begin
+    lwt () = printf "%a Found_node from %s (%s:%d)\n" date () (hex nid) (string_of_inet_addr ip) port in
+    Lwt_list.iter_s (fun (nid, ADDR_INET (ip, port)) -> printf "%s (%s:%d)\n" (hex nid) (string_of_inet_addr ip) port) nodes
+  end
 end
