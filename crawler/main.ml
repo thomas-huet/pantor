@@ -242,11 +242,13 @@ let rec supervisor i =
     lwt () = wait timeout_good_nodes in
     supervisor 0
 
-let main =
+let main = try_lwt
   lwt db = PGOCaml.connect () in
   for i = 0 to (1 lsl n_bits) - 1 do
     async (fun () -> thread db i)
   done;
   supervisor 0
+with Unix_error(ENOENT, "connect", "") ->
+  Lwt_io.eprintf "Can't connect to database\n"
 
 let () = Lwt_main.run main
