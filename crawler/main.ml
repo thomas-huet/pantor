@@ -181,7 +181,7 @@ let hunt db info nodes () = try
     end
     in
     let query already (node, addr) =
-      if S.mem node already then already
+      if node.[0] <> info.[0] || S.mem node already then already
       else begin
         async (fun () ->
           let i = Random.int (1 lsl n_bits) in
