@@ -127,6 +127,7 @@ let mark_done infohash =
   try Hashtbl.remove nodes_for_hash infohash with Not_found -> ()
 
 let request_metadata db delay peer infohash () =
+  if String.length infohash <> 20 then return_unit else
   lwt already = is_done db infohash in
   if already then return_unit else
   lwt () = wait delay in
