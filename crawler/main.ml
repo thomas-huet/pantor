@@ -230,10 +230,12 @@ let answer db i orig = function
 | Pong (tid, nid) ->
   propose_good (nid, orig);
   return_unit
-| Got_peers (infohash, nid, token, peers) ->
-  let () =
+| Got_peers (info, nid, token, peers) ->
+  begin try
+    let infohash = fst (Hashtbl.find nodes_for_hash info) in
     List.iter (fun peer -> async (request_metadata db 0. peer infohash)) peers
-  in
+  with Not_found -> ()
+  end;
   return_unit
 | Got_nodes (info, _, _, nodes) ->
   if String.length info = 2 then
