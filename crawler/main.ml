@@ -124,7 +124,7 @@ let is_done db infohash =
 
 let mark_done infohash =
   Lru.add lru infohash;
-  try Hashtbl.remove nodes_for_hash infohash with Not_found -> ()
+  try Hashtbl.remove nodes_for_hash (String.sub infohash 0 2) with Not_found -> ()
 
 let request_metadata db delay peer infohash () =
   if String.length infohash <> 20 then return_unit else
@@ -164,14 +164,19 @@ let request_metadata db delay peer infohash () =
   | Timeout ->
     Lwt_io.printf "/!\\ Timeout\n"
 
-let hunt db infohash nodes () =
+let hunt db info nodes () = try
+  let infohash =
+    if String.length info = 20 then info
+    else fst (Hashtbl.find nodes_for_hash info)
+  in
+  let info = String.sub info 0 2 in
   lwt finished = is_done db infohash in
   if finished then return_unit
   else begin
     let already = try
-      Hashtbl.find nodes_for_hash infohash
+      snd (Hashtbl.find nodes_for_hash info)
     with Not_found -> begin
-      Hashtbl.add nodes_for_hash infohash S.empty;
+      Hashtbl.add nodes_for_hash info (infohash, S.empty);
       S.empty
     end
     in
@@ -180,15 +185,16 @@ let hunt db infohash nodes () =
       else begin
         async (fun () ->
           let i = Random.int (1 lsl n_bits) in
-	  Get_peers (infohash, ids.(i), infohash)
+	  Get_peers (info, ids.(i), infohash)
 	  |> bencode
 	  |> send_string sockets.(i) addr);
         S.add node already
       end
     in
-    Hashtbl.replace nodes_for_hash infohash (List.fold_left query already nodes);
+    Hashtbl.replace nodes_for_hash info (infohash, (List.fold_left query already nodes));
     return_unit
   end
+with _ -> return_unit
 
 let answer db i orig = function
 | Ping (tid, _) ->
@@ -229,9 +235,9 @@ let answer db i orig = function
     List.iter (fun peer -> async (request_metadata db 0. peer infohash)) peers
   in
   return_unit
-| Got_nodes (infohash, _, _, nodes) ->
-  if String.length infohash = 20 then
-    async (hunt db infohash nodes); 
+| Got_nodes (info, _, _, nodes) ->
+  if String.length info = 2 then
+    async (hunt db info nodes); 
   return_unit
 | Error (_, _, _) -> return_unit
 
