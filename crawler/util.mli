@@ -1,0 +1,1 @@
+val hex : string -> string

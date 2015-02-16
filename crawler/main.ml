@@ -114,7 +114,8 @@ let is_done db infohash =
     Lru.add lru infohash;
     return_true
   end else
-    lwt witness = PGSQL(db) "SELECT torrent FROM file WHERE torrent = $infohash LIMIT 1" in
+    let infohex = Util.hex infohash in
+    lwt witness = PGSQL(db) "SELECT torrent FROM file WHERE torrent = $infohex LIMIT 1" in
     if witness <> [] || Lru.mem lru infohash then begin
       Lru.add lru infohash;
       return_true
@@ -137,11 +138,12 @@ let request_metadata db delay peer infohash () =
     lwt already = is_done db infohash in
     if already then return_unit else begin
       mark_done infohash;
+      let infohex = Util.hex infohash in
       let add name size =
 	lwt () = Lwt_io.printf "%s\t%d\n" name size in
 	let size = Int64.of_int size in
 	PGSQL(db) "INSERT INTO file(torrent, name, size)
-		   VALUES($infohash, $name, $size)"
+		   VALUES($infohex, $name, $size)"
       in
       let total = List.fold_left (fun a (_, b) -> a + b) 0 metadata.files in
       lwt () = add (Yojson.Basic.to_string (`String metadata.name)) total in
