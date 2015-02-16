@@ -146,7 +146,7 @@ let create addr infohash =
   lwt () = try_lwt
     pick [timeout receive_timeout; connect sock addr]
   with Unix_error(ECONNREFUSED, "connect", "") ->
-    fail_close (Bad_wire "Connection failed") sock
+    fail (Bad_wire "Connection failed")
   in
   let peer_id = "Pantor              " in
   let header = "\019BitTorrent protocol\000\000\000\000\000\x10\000\000" in
