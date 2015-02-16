@@ -197,10 +197,15 @@ let answer db i orig = function
   |> bencode
   |> send_string sockets.(i) orig
 | Get_peers (tid, nid, infohash) ->
-  async (hunt db infohash (get_nodes infohash));
-  Got_nodes (tid, ids.(i), token, get_nodes infohash)
-  |> bencode
-  |> send_string sockets.(i) orig
+  if String.length infohash = 20 then begin
+    async (hunt db infohash (get_nodes infohash));
+    Got_nodes (tid, ids.(i), token, get_nodes infohash)
+    |> bencode
+    |> send_string sockets.(i) orig
+  end else
+    Error (tid, 203, "invalid info_hash (not 20 bytes)")
+    |> bencode
+    |> send_string sockets.(i) orig
 | Found_node (tid, nid, nodes) ->
   List.iter propose_unknown nodes;
   return_unit
@@ -222,7 +227,8 @@ let answer db i orig = function
   in
   return_unit
 | Got_nodes (infohash, _, _, nodes) ->
-  async (hunt db infohash nodes); 
+  if String.length infohash = 20 then
+    async (hunt db infohash nodes); 
   return_unit
 | Error (_, _, _) -> return_unit
 
