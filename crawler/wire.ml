@@ -145,7 +145,9 @@ let create addr infohash =
   let sock = socket PF_INET SOCK_STREAM 0 in
   lwt () = try_lwt
     pick [timeout receive_timeout; connect sock addr]
-  with Unix_error(ECONNREFUSED, "connect", "") ->
+  with
+  | Unix_error(ECONNREFUSED, "connect", "")
+  | Unix_error(EHOSTUNREACH, "connect", "") ->
     fail (Bad_wire "Connection failed")
   in
   let peer_id = "Pantor              " in
