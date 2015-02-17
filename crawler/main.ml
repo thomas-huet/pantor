@@ -99,7 +99,7 @@ let propose_unknown ((nid, ADDR_INET (ip, port)) as node) =
   if List.mem node good then ()
   else begin
     async (fun () ->
-      Ping ("un", ids.(i))
+      Find_node ("pi", ids.(i), ids.(i))
       |> bencode
       |> send_string sockets.(i) (ADDR_INET (ip, port)));
     if not (List.mem node unknown)
@@ -247,11 +247,8 @@ let answer db i orig = function
   in
   let () = async (request_metadata db wait_time addr infohash) in
   return_unit
-| Pong ("go", nid) ->
-  propose_good (nid, orig);
-  return_unit
 | Pong (_, nid) ->
-  propose_unknown (nid, orig);
+  propose_good (nid, orig);
   return_unit
 | Got_peers (info, nid, token, peers) ->
   propose_good (nid, orig);
@@ -298,7 +295,7 @@ let close_node i =
       if bits >= n_bits then None else
       scan 0 (bits + 1)
   in
-  scan 0 1
+  scan 0 0
 
 let rec supervisor i =
   if i = 0 then async bootstrap;
@@ -306,17 +303,16 @@ let rec supervisor i =
     lwt () = wait (timeout_good_nodes /. float (1 lsl n_bits)) in
     let good, unknown = good_nodes.(i) in
     good_nodes.(i) <- [], good;
-    let ping tid (_, addr) =
+    let ping (_, addr) =
       for j = 1 to ping_n do
         async (fun () ->
           let j = Random.int (1 lsl n_bits) in
-	  Ping (tid, ids.(j))
+	  Ping ("pi", ids.(j))
 	  |> bencode
 	  |> send_string sockets.(j) addr)
       done
     in
-    List.iter (ping "go") good;
-    List.iter (ping "un") unknown;
+    List.iter ping good;
     if List.length good < (1 lsl k_bits) then
       match close_node i with
       | None -> supervisor (i + 1)
