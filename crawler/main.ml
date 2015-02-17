@@ -7,7 +7,7 @@ module PGOCaml = PGOCaml_generic.Make(Thread)
 module S = Set.Make(String)
 
 let n_bits = 9
-let timeout_good_nodes = 7. *. 60.
+let timeout_good_nodes = 14. *. 60.
 let k_bits = 3
 let token = "token"
 let bootstrap_nodes = [
@@ -216,6 +216,7 @@ let answer db i orig = function
     |> bencode
     |> send_string sockets.(i) orig
 | Found_node (tid, nid, nodes) ->
+  propose_good (nid, orig);
   List.iter propose_unknown nodes;
   return_unit
 | Announce_peer (tid, nid, _, infohash, port, implied) ->
@@ -231,13 +232,15 @@ let answer db i orig = function
   propose_good (nid, orig);
   return_unit
 | Got_peers (info, nid, token, peers) ->
+  propose_good (nid, orig);
   begin try
     let infohash = fst (Hashtbl.find nodes_for_hash info) in
     List.iter (fun peer -> async (request_metadata db 0. peer infohash)) peers
   with Not_found -> ()
   end;
   return_unit
-| Got_nodes (info, _, _, nodes) ->
+| Got_nodes (info, nid, _, nodes) ->
+  propose_good (nid, orig);
   if String.length info = 2 then
     async (hunt db info nodes); 
   return_unit
