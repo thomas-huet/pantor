@@ -6,6 +6,11 @@ module PGOCaml = PGOCaml_generic.Make(Thread)
 
 module S = Set.Make(String)
 
+module A = Set.Make(struct
+  type t = sockaddr
+  let compare = compare
+end)
+
 let n_bits = 9
 let timeout_good_nodes = 14. *. 60.
 let k_bits = 3
@@ -109,6 +114,8 @@ let lru = Lru.create 1000
 
 let nodes_for_hash = Hashtbl.create 42
 
+let peers_for_hash = Hashtbl.create 42
+
 let is_done db infohash =
   if Lru.mem lru infohash then begin
     Lru.add lru infohash;
@@ -124,12 +131,22 @@ let is_done db infohash =
 
 let mark_done infohash =
   Lru.add lru infohash;
-  try Hashtbl.remove nodes_for_hash (String.sub infohash 0 2) with Not_found -> ()
+  begin try Hashtbl.remove nodes_for_hash (String.sub infohash 0 2) with Not_found -> () end;
+  try Hashtbl.remove peers_for_hash infohash with Not_found -> ()
 
 let request_metadata db delay peer infohash () =
   if String.length infohash <> 20 then return_unit else
   lwt already = is_done db infohash in
   if already then return_unit else
+  let peers = try
+    Hashtbl.find peers_for_hash infohash
+  with Not_found -> begin
+    Hashtbl.add peers_for_hash infohash A.empty;
+    A.empty
+  end
+  in
+  if A.mem peer peers then return_unit else begin
+  Hashtbl.replace peers_for_hash infohash (A.add peer peers);
   lwt () = wait delay in
   let open Wire in
   try_lwt
@@ -163,6 +180,7 @@ let request_metadata db delay peer infohash () =
     Lwt_io.printf "/!\\ Bad wire \"%s\"\n" s
   | Timeout ->
     Lwt_io.printf "/!\\ Timeout\n"
+  end
 
 let hunt db info nodes () = try
   let infohash =
@@ -181,7 +199,7 @@ let hunt db info nodes () = try
     end
     in
     let query already (node, addr) =
-      if node.[0] <> info.[0] || S.mem node already then already
+      if read_int n_bits node <> read_int n_bits infohash || S.mem node already then already
       else begin
         async (fun () ->
           let i = Random.int (1 lsl n_bits) in
