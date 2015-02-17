@@ -43,15 +43,19 @@ type extended_info = {
 
 exception Bad_wire of string
 
+let shutdown s = try
+  shutdown s SHUTDOWN_ALL
+with _ -> ()
+
 let fail_close exn sock =
-  shutdown sock SHUTDOWN_ALL;
+  shutdown sock;
   fail exn
 
 let raise_close exn sock =
-  shutdown sock SHUTDOWN_ALL;
+  shutdown sock;
   raise exn
 
-let close wire = shutdown wire.sock SHUTDOWN_ALL
+let close wire = shutdown wire.sock
 
 let receive_string sock len =
   let buf = Bytes.create len in
@@ -146,8 +150,7 @@ let create addr infohash =
   lwt () = try_lwt
     pick [timeout receive_timeout; connect sock addr]
   with
-  | Unix_error(ECONNREFUSED, "connect", "")
-  | Unix_error(EHOSTUNREACH, "connect", "") ->
+  | Unix_error(_, "connect", "") ->
     fail (Bad_wire "Connection failed")
   in
   let peer_id = "Pantor              " in
