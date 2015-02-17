@@ -215,7 +215,8 @@ let hunt db info nodes () = try
 with _ -> return_unit
 
 let answer db i orig = function
-| Ping (tid, _) ->
+| Ping (tid, nid) ->
+  propose_unknown (nid, orig);
   Pong (tid, ids.(i))
   |> bencode
   |> send_string sockets.(i) orig
