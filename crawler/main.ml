@@ -84,28 +84,23 @@ let propose_good ((nid, ADDR_INET (ip, port)) as node) =
   let i = read_int n_bits nid in
   let good, unknown = good_nodes.(i) in
   if List.mem node good then ()
-  else if List.mem node unknown then
+  else if List.length good < (1 lsl k_bits) then
     good_nodes.(i) <- node :: good, List.filter ((<>) node) unknown
-  else if List.length good + List.length unknown < (1 lsl k_bits) then
-    good_nodes.(i) <- node :: good, unknown
-  else if unknown = [] then ()
   else
-    good_nodes.(i) <- node :: good, List.tl unknown
+    good_nodes.(i) <- node :: good, []
 
 let propose_unknown ((nid, ADDR_INET (ip, port)) as node) =
   if ip <> my_ip then
   let i = read_int n_bits nid in
   let good, unknown = good_nodes.(i) in
-  if List.mem node good then ()
-  else begin
+  if not (List.mem node good)
+  && not (List.mem node unknown)
+  && List.length good < (1 lsl k_bits) then begin
+    good_nodes.(i) <- good, node :: unknown;
     async (fun () ->
       Find_node ("pi", ids.(i), ids.(i))
       |> bencode
-      |> send_string sockets.(i) (ADDR_INET (ip, port)));
-    if not (List.mem node unknown)
-       && List.length good + List.length unknown < (1 lsl k_bits)
-    then
-      good_nodes.(i) <- good, node :: unknown
+      |> send_string sockets.(i) (ADDR_INET (ip, port)))
   end
 
 let wait d = catch (fun () -> timeout d) (fun _ -> return ());;
@@ -301,7 +296,7 @@ let rec supervisor i =
   if i = 0 then async bootstrap;
   if i < 1 lsl n_bits then
     lwt () = wait (timeout_good_nodes /. float (1 lsl n_bits)) in
-    let good, unknown = good_nodes.(i) in
+    let good, _ = good_nodes.(i) in
     good_nodes.(i) <- [], good;
     let ping (_, addr) =
       for j = 1 to ping_n do
