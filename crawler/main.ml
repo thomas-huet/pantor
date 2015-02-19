@@ -266,7 +266,7 @@ let rec thread db i =
   lwt (_, orig) = recvfrom sockets.(i) buf 0 512 [] in
   let msg = try
     bdecode buf
-  with _ -> Error ("", 0, "")
+  with _ -> Error ("", 0, String.escaped buf)
   in
   lwt () = Log.input orig msg in
   lwt () = answer db i orig msg in
@@ -285,8 +285,8 @@ let close_node i =
   let rec scan j bits =
     if j < (1 lsl bits) then
       match good_nodes.(((i lsr bits) lsl bits) + j) with
-      | node :: _, _ | [], node :: _ -> Some (j, node)
-      | [], [] -> scan (j + 1) bits
+      | node :: _, _ -> Some (j, node)
+      | [], _ -> scan (j + 1) bits
     else
       if bits >= n_bits then None else
       scan 0 (bits + 1)
