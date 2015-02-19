@@ -266,11 +266,11 @@ let answer db i orig = function
 | Error (_, _, _) -> return_unit
 
 let rec thread db i =
-  let buf = Bytes.create 512 in
-  lwt (_, orig) = recvfrom sockets.(i) buf 0 512 [] in
+  let buf = Bytes.create 1024 in
+  lwt (_, orig) = recvfrom sockets.(i) buf 0 1024 [] in
   let msg = try
     bdecode buf
-  with _ -> Error ("", 0, "")
+  with _ -> Error ("", 0, String.escaped buf)
   in
   lwt () = Log.input orig msg in
   lwt () = answer db i orig msg in
