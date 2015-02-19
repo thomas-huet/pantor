@@ -70,9 +70,10 @@ let read_int n s =
   in
   read_int n 0
 
-let send_string sock dst str =
+let send_string sock dst str = try_lwt
   lwt _ = sendto sock str 0 (String.length str) [] dst in
   return_unit
+with _ -> return_unit
 
 let get_nodes target =
   let i = read_int n_bits target in
