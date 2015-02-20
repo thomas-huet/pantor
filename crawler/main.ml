@@ -4,10 +4,15 @@ open Lwt_unix
 
 module PGOCaml = PGOCaml_generic.Make(Thread)
 
-module S = Set.Make(String)
+module StrSet = Set.Make(String)
 
-module A = Set.Make(struct
+module SockSet = Set.Make(struct
   type t = sockaddr
+  let compare = compare
+end)
+
+module NodeSet = Set.Make(struct
+  type t = string * sockaddr
   let compare = compare
 end)
 
@@ -61,7 +66,7 @@ let () = randomize_ids ()
 
 open Kprc
 
-let good_nodes = Array.make (1 lsl n_bits) ([], [])
+let good_nodes = Array.make (1 lsl n_bits) (NodeSet.empty, NodeSet.empty)
 
 let read_int n s =
   let rec read_int n i =
@@ -77,27 +82,26 @@ with _ -> return_unit
 
 let get_nodes target =
   let i = read_int n_bits target in
-  let good, unknown = good_nodes.(i) in
-  good @ unknown
+  NodeSet.elements (fst good_nodes.(i))
 
 let propose_good ((nid, ADDR_INET (ip, port)) as node) =
   if ip <> my_ip then
   let i = read_int n_bits nid in
   let good, unknown = good_nodes.(i) in
-  if List.mem node good then ()
-  else if List.length good < (1 lsl k_bits) then
-    good_nodes.(i) <- node :: good, List.filter ((<>) node) unknown
+  if NodeSet.mem node good then ()
+  else if NodeSet.cardinal good < (1 lsl k_bits) then
+    good_nodes.(i) <- NodeSet.add node good, NodeSet.filter ((<>) node) unknown
   else
-    good_nodes.(i) <- node :: good, []
+    good_nodes.(i) <- NodeSet.add node good, NodeSet.empty
 
 let propose_unknown ((nid, ADDR_INET (ip, port)) as node) =
   if ip <> my_ip then
   let i = read_int n_bits nid in
   let good, unknown = good_nodes.(i) in
-  if not (List.mem node good)
-  && not (List.mem node unknown)
-  && List.length good < (1 lsl k_bits) then begin
-    good_nodes.(i) <- good, node :: unknown;
+  if not (NodeSet.mem node good)
+  && not (NodeSet.mem node unknown)
+  && NodeSet.cardinal good < (1 lsl k_bits) then begin
+    good_nodes.(i) <- good, NodeSet.add node unknown;
     async (fun () ->
       Find_node ("pi", ids.(i), ids.(i))
       |> bencode
@@ -137,12 +141,12 @@ let request_metadata db delay peer infohash () =
   let peers = try
     Hashtbl.find peers_for_hash infohash
   with Not_found -> begin
-    Hashtbl.add peers_for_hash infohash A.empty;
-    A.empty
+    Hashtbl.add peers_for_hash infohash SockSet.empty;
+    SockSet.empty
   end
   in
-  if A.mem peer peers then return_unit else begin
-  Hashtbl.replace peers_for_hash infohash (A.add peer peers);
+  if SockSet.mem peer peers then return_unit else begin
+  Hashtbl.replace peers_for_hash infohash (SockSet.add peer peers);
   lwt () = wait delay in
   let open Wire in
   try_lwt
@@ -190,19 +194,19 @@ let hunt db info nodes () = try
     let already = try
       snd (Hashtbl.find nodes_for_hash info)
     with Not_found -> begin
-      Hashtbl.add nodes_for_hash info (infohash, S.empty);
-      S.empty
+      Hashtbl.add nodes_for_hash info (infohash, StrSet.empty);
+      StrSet.empty
     end
     in
     let query already (node, addr) =
-      if read_int n_bits node <> read_int n_bits infohash || S.mem node already then already
+      if read_int n_bits node <> read_int n_bits infohash || StrSet.mem node already then already
       else begin
         async (fun () ->
           let i = Random.int (1 lsl n_bits) in
 	  Get_peers (info, ids.(i), infohash)
 	  |> bencode
 	  |> send_string sockets.(i) addr);
-        S.add node already
+        StrSet.add node already
       end
     in
     Hashtbl.replace nodes_for_hash info (infohash, (List.fold_left query already nodes));
@@ -284,9 +288,9 @@ let bootstrap () =
 let close_node i =
   let rec scan j bits =
     if j < (1 lsl bits) then
-      match good_nodes.(((i lsr bits) lsl bits) + j) with
-      | node :: _, _ -> Some (j, node)
-      | [], _ -> scan (j + 1) bits
+      let nodes = fst good_nodes.(((i lsr bits) lsl bits) + j) in
+      if NodeSet.is_empty nodes then scan (j + 1) bits
+      else Some (j, NodeSet.choose nodes)
     else
       if bits >= n_bits then None else
       scan 0 (bits + 1)
@@ -298,7 +302,7 @@ let rec supervisor i =
   if i < 1 lsl n_bits then
     lwt () = wait (timeout_good_nodes /. float (1 lsl n_bits)) in
     let good, _ = good_nodes.(i) in
-    good_nodes.(i) <- [], good;
+    good_nodes.(i) <- NodeSet.empty, good;
     let ping (_, addr) =
       for j = 1 to ping_n do
         async (fun () ->
@@ -308,8 +312,8 @@ let rec supervisor i =
 	  |> send_string sockets.(j) addr)
       done
     in
-    List.iter ping good;
-    if List.length good < (1 lsl k_bits) then
+    NodeSet.iter ping good;
+    if NodeSet.cardinal good < (1 lsl k_bits) then
       match close_node i with
       | None -> supervisor (i + 1)
       | Some (j, (_, addr)) ->
