@@ -191,15 +191,16 @@ let hunt db info nodes () = try
   lwt finished = is_done db infohash in
   if finished then return_unit
   else begin
-    let already = try
+    let bits, already = try
       snd (Hashtbl.find nodes_for_hash info)
     with Not_found -> begin
-      Hashtbl.add nodes_for_hash info (infohash, StrSet.empty);
-      StrSet.empty
+      Hashtbl.add nodes_for_hash info (infohash, (n_bits, StrSet.empty));
+      n_bits, StrSet.empty
     end
     in
     let query already (node, addr) =
-      if read_int n_bits node <> read_int n_bits infohash || StrSet.mem node already then already
+      if read_int bits node <> read_int bits infohash
+      || StrSet.mem node already then already
       else begin
         async (fun () ->
           let i = Random.int (1 lsl n_bits) in
@@ -209,7 +210,16 @@ let hunt db info nodes () = try
         StrSet.add node already
       end
     in
-    Hashtbl.replace nodes_for_hash info (infohash, (List.fold_left query already nodes));
+    let already = List.fold_left query already nodes in
+    let best =
+      StrSet.filter
+        (fun node -> read_int (bits + 1) node = read_int (bits + 1) infohash)
+        already
+    in
+    if StrSet.cardinal best > (1 lsl k_bits) * 2 then
+      Hashtbl.replace nodes_for_hash info (infohash, (bits + 1, best))
+    else
+      Hashtbl.replace nodes_for_hash info (infohash, (bits, already));
     return_unit
   end
 with _ -> return_unit
